@@ -35,7 +35,7 @@ class load_and_deduplicate():
 		self.data_dir = data_folder_dir
 
 		# getting all file dirs
-		self.all_file_dirs = os.listdir(self.data_dir)
+		self.all_file_dirs = [file for file in os.listdir(self.data_dir) if file[:4] == '人工智能']
 
 		# placeholders for text and date data
 		self.current_texts = []
@@ -43,7 +43,7 @@ class load_and_deduplicate():
 
 		# placeholders for cumulative texts and dates
 		self.texts = []
-		self.date = []
+		self.dates = []
 
 #---------------------------------------------------------------------------------------------------------------------
 
@@ -56,12 +56,12 @@ class load_and_deduplicate():
 
 		# quering the data files
 		# converting file names to useful info
-		begin_dates = [datetime.datetime.strptime(name.split('_')[1]) for name in self.all_file_dirs]
-		end_dates = [datetime.datetime.strptime(name.split('_')[2]) for name in self.all_file_dirs]
+		begin_dates = [datetime.datetime.strptime(name.split('_')[1], '%Y-%m-%d') for name in self.all_file_dirs]
+		end_dates = [datetime.datetime.strptime(name.split('_')[2], '%Y-%m-%d') for name in self.all_file_dirs]
 
 		# extracting relevant indices
-		begin_indices = [i for i, date in begin_dates if date >= begin_date]
-		end_indices = [i for i, date in begin_dates if date <= begin_date]
+		begin_indices = [i for i, date in enumerate(begin_dates) if date >= begin_date]
+		end_indices = [i for i, date in enumerate(end_dates) if date <= end_date]
 
 		# take the intercept of the 2 lists of indices and determine the correct file names
 		index_overlap = list(set(begin_indices)&set(end_indices))
@@ -78,22 +78,20 @@ class load_and_deduplicate():
 		file_names: a list of file names to be loaded into one variable
 		"""
 
-		# splitting files into texts and dates
-		text_names = [name for name in file_names if name.split('_')[-1:] == 'texts']
-		date_names = [name for name in file_names if name.split('_')[-1:] == 'dates']
+		# loading the names without discriminating whether its date or text
+		fnames = ['_'.join(name.split('_')[:3]) for name in file_names]
 
 		# resetting current placeholders
 		self.current_texts = []
 		self.current_dates = []
 
 		# loading in the sample data's text and dates
-		for i in range(len(text_names)):
-
-			with open(os.path.join(self.data_dir, name), 'rb') as handle:
+		for name in fnames:
+			with open(os.path.join(self.data_dir, name + '_texts.pickle'), 'rb') as handle:
 				texts = pickle.load(handle)
 			self.current_texts += texts
 
-			with open(os.path.join(self.data_dir, sorted(all_dates)[0]), 'rb') as handle:
+			with open(os.path.join(self.data_dir, name + '_dates.pickle'), 'rb') as handle:
 				dates = pickle.load(handle)
 			self.current_dates += dates
 
@@ -105,12 +103,12 @@ class load_and_deduplicate():
 		"""
 		# iterating for getting exact duplicates
 		clusters = []
-		for i, tweet_0 in enumerate(self.texts):
+		for i, tweet_0 in enumerate(self.current_texts):
 			if sum([i in clus for clus in clusters]) == 0:
 				clusters.append([i])
 			else:
 				continue
-			for j,tweet_1 in enumerate(texts[i+1:]):
+			for j,tweet_1 in enumerate(self.current_texts[i+1:]):
 				if tweet_0 == tweet_1:
 					clusters[-1].append(i+j+1)
 
@@ -124,10 +122,10 @@ class load_and_deduplicate():
 			ind_holder = 0
 			for i, ind in enumerate(clus):
 				if i == 0:
-					min_date = dates[ind]
+					min_date = self.current_dates[ind]
 					ind_holder = ind
-				elif dates[ind] < min_date:
-					min_date = dates[ind]
+				elif self.current_dates[ind] < min_date:
+					min_date = self.current_dates[ind]
 					ind_holder = ind
 			ind_remove += [ind for ind in clus if ind != ind_holder]
 
@@ -141,11 +139,6 @@ class load_and_deduplicate():
 		"""
 		wrapper function that streamlines the naive deduplication process
 		"""
-		# getting file names
-		target_file_names = self.get_file_names(begin_date, end_date)
-
-		# loading in data
-		self.load_data(target_file_names)
 
 		# converting input dates into datetime format
 		begin_date = datetime.datetime.strptime(begin_date, '%Y-%m-%d')
@@ -155,7 +148,7 @@ class load_and_deduplicate():
 		n_days = (end_date - begin_date).days
 
 		# calculating the number of iterations needed
-		if n_iter%window_size == 0:
+		if n_days%window_size == 0:
 			n_iter = int(n_days/window_size)
 		else:
 			n_iter = floor(n_days/window_size) + 1
@@ -168,7 +161,7 @@ class load_and_deduplicate():
 			# setting sub_begin_date and sub_end_date
 			sub_begin_date = begin_date + timedelta(days = i*(window_size))
 			if i != n_iter:
-				sub_end_date = sub_end_date + tiedelta(days = window_size - 1)
+				sub_end_date = sub_begin_date + timedelta(days = window_size - 1)
 			else:
 				sub_end_date = end_date
 
