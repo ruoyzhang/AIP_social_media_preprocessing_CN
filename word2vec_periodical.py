@@ -32,7 +32,7 @@ begin = time.time()
 
 # placeholder for the top n keywords
 li_top_n = []
-
+  
 # iterate through for continous execution
 for i in range(n_iter):
 	print('iter {}'.format(i))
